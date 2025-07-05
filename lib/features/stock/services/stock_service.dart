@@ -21,7 +21,8 @@ class StockService {
           }
         }
       }
-          
+      
+      // Créer les modèles sans essayer de récupérer les noms
       return stockLogsList
           .whereType<Map<String, dynamic>>()
           .map((item) => StockLogModel.fromJson(item))

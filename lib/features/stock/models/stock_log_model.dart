@@ -27,20 +27,58 @@ class StockLogModel {
 
   factory StockLogModel.fromJson(Map<String, dynamic> json) {
     try {
+      // Gestion sécurisée du userId
+      String userId = '';
+      String userName = 'Utilisateur';
+      
+      if (json['userId'] != null) {
+        if (json['userId'] is String) {
+          userId = json['userId'];
+        } else if (json['userId'] is Map) {
+          userId = json['userId']['_id'] ?? json['userId']['id'] ?? '';
+          userName = json['userId']['name'] ?? 'Utilisateur';
+        }
+      }
+      
+      // Gestion sécurisée du productName
+      String productName = 'Produit inconnu';
+      String productId = json['productId'] ?? '';
+      
+      if (json['productName'] != null && json['productName'].toString().isNotEmpty) {
+        productName = json['productName'];
+      } else if (json['product'] != null && json['product'] is Map) {
+        productName = json['product']['name'] ?? 'Produit inconnu';
+      } else if (productId.isNotEmpty) {
+        // Format plus court et lisible
+        productName = 'Produit #${productId.length > 8 ? productId.substring(0, 8) : productId}';
+      }
+      
+      // Gestion sécurisée de la date
+      DateTime timestamp;
+      try {
+        if (json['timestamp'] != null) {
+          timestamp = DateTime.parse(json['timestamp']);
+        } else if (json['createdAt'] != null) {
+          timestamp = DateTime.parse(json['createdAt']);
+        } else {
+          timestamp = DateTime.now();
+        }
+      } catch (e) {
+        timestamp = DateTime.now();
+      }
+      
       return StockLogModel(
         id: json['_id'] ?? json['id'] ?? '',
-        productId: json['productId'] ?? '',
-        productName: json['productName'] ?? json['product']?['name'] ?? 'Produit inconnu',
+        productId: productId,
+        productName: productName,
         change: json['change'] is int
           ? json['change']
           : int.tryParse(json['change'].toString()) ?? 0,
         type: json['type'] ?? 'in',
         note: json['note'],
-        timestamp: json['timestamp'] != null 
-            ? DateTime.parse(json['timestamp'])
-            : DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-        userId: json['userId'] ?? '',
-        userName: json['userName'] ?? json['userId']?['name'] ?? 'Utilisateur',
+        timestamp: timestamp,
+        userId: userId,
+        userName: json['userName'] ?? userName,
       );
     } catch (e) {
       AppLogger.error('Erreur lors de la création du StockLogModel', e);

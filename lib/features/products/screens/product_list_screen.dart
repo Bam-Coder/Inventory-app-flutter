@@ -26,7 +26,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
   @override
   void initState() {
     super.initState();
-    Provider.of<ProductProvider>(context, listen: false).loadProducts();
+    print('🚀 Initialisation de ProductListScreen');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('🔄 Chargement des produits depuis initState');
+      Provider.of<ProductProvider>(context, listen: false).loadProducts();
+    });
   }
 
   @override
@@ -208,7 +212,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                           ))
                 : RefreshIndicator(
                     onRefresh: () => provider.loadProducts(),
-                    child: provider.isSearching
+                    child: provider.isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : provider.error != null
                             ? Center(
@@ -230,34 +234,64 @@ class _ProductListScreenState extends State<ProductListScreen> {
                                   ],
                                 ),
                               )
-                            : provider.searchResults.isEmpty
+                            : provider.products.isEmpty
                                 ? Center(
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                                        Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
                                         const SizedBox(height: 16),
                                         Text(
-                                          'Aucun résultat',
+                                          'Aucun produit',
                                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                                 color: Colors.grey[600],
+                                              ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Ajoutez votre premier produit',
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                color: Colors.grey[500],
                                               ),
                                         ),
                                       ],
                                     ),
                                   )
-                                : ListView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: _searchController.text.isNotEmpty
-                                        ? provider.searchResults.length
-                                        : provider.products.length,
-                                    itemBuilder: (context, index) {
-                                      final ProductModel product = _searchController.text.isNotEmpty
-                                          ? provider.searchResults[index]
-                                          : provider.products[index];
-                                      return _buildProductCard(context, product, provider);
-                                    },
-                                  ),
+                                : _searchController.text.isNotEmpty
+                                    ? (provider.isSearching
+                                        ? const Center(child: CircularProgressIndicator())
+                                        : provider.searchResults.isEmpty
+                                            ? Center(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                                                    const SizedBox(height: 16),
+                                                    Text(
+                                                      'Aucun résultat',
+                                                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                                            color: Colors.grey[600],
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            : ListView.builder(
+                                                padding: const EdgeInsets.all(16),
+                                                itemCount: provider.searchResults.length,
+                                                itemBuilder: (context, index) {
+                                                  final ProductModel product = provider.searchResults[index];
+                                                  return _buildProductCard(context, product, provider);
+                                                },
+                                              ))
+                                    : ListView.builder(
+                                        padding: const EdgeInsets.all(16),
+                                        itemCount: provider.products.length,
+                                        itemBuilder: (context, index) {
+                                          final ProductModel product = provider.products[index];
+                                          return _buildProductCard(context, product, provider);
+                                        },
+                                      ),
                   ),
           ),
         ],
@@ -272,6 +306,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   Widget _buildProductCard(BuildContext context, ProductModel product, ProductProvider provider) {
+    // Debug temporaire
+    print('Prix du produit ${product.name}: ${product.price}');
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -314,21 +351,34 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${product.quantity} unités',
+                  '${product.quantity} ${product.unit}',
                   style: TextStyle(
-                    color: product.quantity <= 10 ? Colors.red : Colors.green,
+                    color: product.quantity <= product.reorderThreshold ? Colors.red : Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              '${product.price.toStringAsFixed(0)} FCFA',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.attach_money,
+                  size: 16,
+                  color: product.price > 0 ? Colors.blue : Colors.grey[600],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  product.price > 0 
+                      ? 'Prix unitaire: ${product.price.toStringAsFixed(0)} FCFA'
+                      : 'Prix unitaire: Non défini',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: product.price > 0 ? Colors.blue : Colors.grey[600],
+                  ),
+                ),
+              ],
             ),
             if (product.supplier != null && product.supplier!.isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -356,6 +406,16 @@ class _ProductListScreenState extends State<ProductListScreen> {
               ),
             ),
             const PopupMenuItem(
+              value: 'update_price',
+              child: Row(
+                children: [
+                  Icon(Icons.attach_money, size: 20, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Ajuster le prix', style: TextStyle(color: Colors.orange)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
               value: 'delete',
               child: Row(
                 children: [
@@ -369,7 +429,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
               value: 'logs',
               child: Row(
                 children: [
-                  Icon(Icons.history, size: 20, color: Colors.orange),
+                  Icon(Icons.history, size: 20, color: Colors.blue),
                   SizedBox(width: 8),
                   Text('Historique'),
                 ],
@@ -379,7 +439,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
               value: 'adjust',
               child: Row(
                 children: [
-                  Icon(Icons.tune, size: 20, color: Colors.blue),
+                  Icon(Icons.tune, size: 20, color: Colors.green),
                   SizedBox(width: 8),
                   Text('Ajuster stock'),
                 ],
@@ -418,25 +478,28 @@ class _ProductListScreenState extends State<ProductListScreen> {
   void _handleProductAction(BuildContext context, ProductModel product, String action, ProductProvider provider) {
     switch (action) {
       case 'edit':
-        Navigator.pushNamed(
-          context,
-          AppRoutes.productForm,
-          arguments: product,
-        );
+        Navigator.pushNamed(context, AppRoutes.productForm, arguments: product);
+        break;
+      case 'update_price':
+        _showUpdatePriceDialog(context, product, provider);
         break;
       case 'delete':
-        _showDeleteDialog(context, product, provider);
+        _showDeleteConfirmation(context, product, provider);
         break;
       case 'logs':
-        _showLogsSheet(context, product);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fonctionnalité en cours de développement')),
+        );
         break;
       case 'adjust':
-        _showAdjustDialog(context, product);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fonctionnalité en cours de développement')),
+        );
         break;
     }
   }
 
-  void _showDeleteDialog(BuildContext context, ProductModel product, ProductProvider provider) {
+  void _showDeleteConfirmation(BuildContext context, ProductModel product, ProductProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -479,25 +542,126 @@ class _ProductListScreenState extends State<ProductListScreen> {
     );
   }
 
-  void _showLogsSheet(BuildContext context, ProductModel product) {
-    final stockProvider = Provider.of<StockProvider>(context, listen: false);
-    stockProvider.fetchLogsForProduct(product.id);
+  void _showUpdatePriceDialog(BuildContext context, ProductModel product, ProductProvider provider) {
+    final priceController = TextEditingController(text: product.price > 0 ? product.price.toString() : '');
     
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => _ProductLogsSheet(product: product),
-    );
-  }
-
-  void _showAdjustDialog(BuildContext context, ProductModel product) {
     showDialog(
       context: context,
-      builder: (context) => AdjustStockDialog(product: product),
+      builder: (context) => AlertDialog(
+        title: Text('Ajuster le prix de ${product.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Afficher le prix actuel
+            if (product.price > 0) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Prix actuel: ${product.price.toStringAsFixed(0)} FCFA',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            TextFormField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Nouveau prix unitaire (FCFA)',
+                hintText: 'Entrez le nouveau prix',
+                prefixIcon: Icon(Icons.attach_money),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Veuillez entrer un prix';
+                }
+                if (double.tryParse(value) == null) {
+                  return 'Prix invalide';
+                }
+                if (double.parse(value) < 0) {
+                  return 'Le prix doit être positif';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Unité: ${product.unit}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final newPrice = double.tryParse(priceController.text);
+              if (newPrice != null && newPrice >= 0) {
+                try {
+                  // Utiliser la nouvelle méthode spécifique pour le prix
+                  await provider.updateProductPrice(product.id, newPrice);
+                  
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Prix de ${product.name} mis à jour: ${newPrice.toStringAsFixed(0)} FCFA'),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Erreur lors de la mise à jour: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Veuillez entrer un prix valide'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.save),
+            label: const Text('Enregistrer'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
     );
   }
-
-
 }
 
 class EditProductDialog extends StatefulWidget {

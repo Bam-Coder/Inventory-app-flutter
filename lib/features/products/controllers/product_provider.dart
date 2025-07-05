@@ -34,6 +34,8 @@ class ProductProvider extends ChangeNotifier {
   static const String _statsCacheKey = 'cache_product_stats';
 
   Future<void> loadProducts({bool forceRefresh = false}) async {
+    print('🔄 Chargement des produits...');
+    
     // Toujours forcer le rechargement pour éviter les problèmes de cache
     if (forceRefresh) {
       await _cache.removeCache(_productsCacheKey);
@@ -45,11 +47,18 @@ class ProductProvider extends ChangeNotifier {
 
     try {
       _products = await _service.fetchProducts();
+      print('✅ Produits chargés: ${_products.length} produits');
+      
+      // Debug: afficher les premiers produits
+      if (_products.isNotEmpty) {
+        print('📦 Premier produit: ${_products.first.name}');
+      }
       
       // Mettre à jour le cache avec les nouvelles données
       await _cache.setData(_productsCacheKey, _products.map((p) => p.toJson()).toList());
     } catch (e) {
       _error = e.toString();
+      print('❌ Erreur lors du chargement des produits: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -75,28 +84,32 @@ class ProductProvider extends ChangeNotifier {
         unit: unit,
         supplier: supplier,
       );
-      // Ajout local de la photo
+      
+      // Ajout local du produit avec TOUS les champs
       _products.insert(0, ProductModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: name,
-        description: description,
+        description: description ?? '',
         quantity: quantity,
+        price: price,
         reorderThreshold: reorderThreshold ?? 5,
         unit: unit ?? 'pièce',
         category: category,
-        supplier: supplier,
+        supplier: supplier ?? '',
         addedBy: '',
         isDeleted: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         imagePath: imagePath,
       ));
+      
       await _cache.removeCache(_productsCacheKey);
       await _cache.removeCache(_statsCacheKey);
       await loadProducts(forceRefresh: true);
       await fetchProductStats(forceRefresh: true);
     } catch (e) {
       _error = e.toString();
+      print('❌ Erreur lors de l\'ajout du produit: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -211,5 +224,32 @@ class ProductProvider extends ChangeNotifier {
     await _cache.removeCache(_statsCacheKey);
     await loadProducts(forceRefresh: true);
     await fetchProductStats(forceRefresh: true);
+  }
+
+  Future<void> updateProductPrice(String id, double newPrice) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _service.updateProductPrice(id, newPrice);
+      
+      // Mettre à jour localement le produit
+      final index = _products.indexWhere((p) => p.id == id);
+      if (index != -1) {
+        final updatedProduct = _products[index].copyWith(price: newPrice);
+        _products[index] = updatedProduct;
+      }
+      
+      await _cache.removeCache(_productsCacheKey);
+      await _cache.removeCache(_statsCacheKey);
+      
+    } catch (e) {
+      _error = e.toString();
+      print('❌ Erreur dans ProductProvider.updateProductPrice: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

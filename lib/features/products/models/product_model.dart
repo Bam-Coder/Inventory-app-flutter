@@ -1,54 +1,80 @@
 class ProductModel {
   final String id;
   final String name;
-  final String? description;
+  final String description;
   final int quantity;
+  final double price;
   final int reorderThreshold;
   final String unit;
   final String category;
-  final String? supplier;
+  final String supplier;
   final String addedBy;
   final bool isDeleted;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
   final String? imagePath;
 
   ProductModel({
     required this.id,
     required this.name,
-    this.description,
+    required this.description,
     required this.quantity,
+    required this.price,
     required this.reorderThreshold,
     required this.unit,
     required this.category,
-    this.supplier,
+    required this.supplier,
     required this.addedBy,
-    this.isDeleted = false,
-    this.createdAt,
-    this.updatedAt,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.updatedAt,
     this.imagePath,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
-    return ProductModel(
-      id: json['_id'] ?? json['id'],
-      name: json['name'] ?? '',
-      description: json['description'],
-      quantity: json['quantity'] ?? 0,
-      reorderThreshold: json['reorderThreshold'] ?? 5,
-      unit: json['unit'] ?? 'pièce',
-      category: json['category'] ?? '',
-      supplier: json['supplier'],
-      addedBy: json['addedBy'] ?? '',
-      isDeleted: json['isDeleted'] ?? false,
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt']) 
-          : null,
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt']) 
-          : null,
-      imagePath: json['imagePath'],
-    );
+    try {
+      print('📦 Création ProductModel depuis JSON: $json');
+      
+      // Gestion sécurisée du prix
+      double price = 0.0;
+      if (json['price'] != null) {
+        if (json['price'] is double) {
+          price = json['price'];
+        } else if (json['price'] is int) {
+          price = json['price'].toDouble();
+        } else {
+          price = double.tryParse(json['price'].toString()) ?? 0.0;
+        }
+      }
+      
+      return ProductModel(
+        id: json['_id'] ?? json['id'] ?? '',
+        name: json['name'] ?? 'Produit sans nom',
+        description: json['description'] ?? '',
+        quantity: json['quantity'] is int
+            ? json['quantity']
+            : int.tryParse(json['quantity'].toString()) ?? 0,
+        price: price, // Utiliser la valeur calculée
+        reorderThreshold: json['reorderThreshold'] is int
+            ? json['reorderThreshold']
+            : int.tryParse(json['reorderThreshold'].toString()) ?? 5,
+        unit: json['unit'] ?? 'pièce',
+        category: json['category'] ?? 'Non catégorisé',
+        supplier: json['supplier'] ?? '',
+        addedBy: json['addedBy'] ?? '',
+        isDeleted: json['isDeleted'] ?? false,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        imagePath: json['imagePath'],
+      );
+    } catch (e) {
+      print('❌ Erreur création ProductModel: $e');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -57,26 +83,25 @@ class ProductModel {
       'name': name,
       'description': description,
       'quantity': quantity,
+      'price': price,
       'reorderThreshold': reorderThreshold,
       'unit': unit,
       'category': category,
       'supplier': supplier,
       'addedBy': addedBy,
       'isDeleted': isDeleted,
-      'createdAt': createdAt?.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       'imagePath': imagePath,
     };
   }
-
-  // Propriété calculée pour la compatibilité
-  double get price => 0.0; // Le prix n'existe pas dans le backend
 
   ProductModel copyWith({
     String? id,
     String? name,
     String? description,
     int? quantity,
+    double? price,
     int? reorderThreshold,
     String? unit,
     String? category,
@@ -92,6 +117,7 @@ class ProductModel {
       name: name ?? this.name,
       description: description ?? this.description,
       quantity: quantity ?? this.quantity,
+      price: price ?? this.price,
       reorderThreshold: reorderThreshold ?? this.reorderThreshold,
       unit: unit ?? this.unit,
       category: category ?? this.category,

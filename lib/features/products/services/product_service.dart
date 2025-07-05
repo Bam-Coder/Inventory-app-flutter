@@ -25,13 +25,19 @@ class ProductService {
         'name': name,
         'category': category,
         'quantity': quantity,
+        'price': price,
         'unit': unit ?? 'pièce',
         'reorderThreshold': reorderThreshold ?? 5,
         'description': description ?? '',
         'supplier': supplier ?? '',
       };
+      
+      // Debug: afficher les données envoyées
+      print('Données envoyées au backend: $productData');
+      
       await _api.post('/products', productData);
     } catch (e) {
+      print('Erreur lors de l\'ajout du produit: $e');
       rethrow;
     }
   }
@@ -42,11 +48,22 @@ class ProductService {
         'name': name,
         'category': category,
         'quantity': quantity,
-        'unit': 'pièce', // Ajout du champ unit requis par le backend
-        'description': '', // Ajout du champ description
+        'price': price,
+        'unit': 'pièce',
+        'description': '',
       };
-      await _api.put('/products/$id', productData);
+      
+      // Debug: afficher les données envoyées
+      print('🔄 Mise à jour du produit $id');
+      print('📦 Données envoyées: $productData');
+      
+      final response = await _api.put('/products/$id', productData);
+      
+      // Debug: afficher la réponse
+      print('✅ Réponse du serveur: $response');
+      
     } catch (e) {
+      print('❌ Erreur lors de la mise à jour du produit: $e');
       rethrow;
     }
   }
@@ -94,6 +111,24 @@ class ProductService {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<void> updateProductPrice(String id, double newPrice) async {
+    try {
+      final productData = {
+        'price': newPrice,
+      };
+      
+      print('💰 Mise à jour du prix du produit $id: $newPrice FCFA');
+      
+      final response = await _api.put('/products/$id', productData);
+      
+      print('✅ Prix mis à jour avec succès: $response');
+      
+    } catch (e) {
+      print('❌ Erreur lors de la mise à jour du prix: $e');
+      rethrow;
     }
   }
 }

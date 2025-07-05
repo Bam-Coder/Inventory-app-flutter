@@ -188,7 +188,7 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
             const SizedBox(height: 4),
             Text(
               'Par ${log.createdBy} • '
-              '${DateFormat('dd/MM/yyyy HH:mm').format(log.createdAt)}',
+              '${DateFormat('dd/MM/yyyy à HH:mm').format(log.createdAt)}',
               style: TextStyle(
                 color: Colors.grey[500],
                 fontSize: 11,
