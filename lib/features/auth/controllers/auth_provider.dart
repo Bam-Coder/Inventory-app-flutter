@@ -22,53 +22,17 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoadingProfile => _isLoadingProfile;
 
   Future<bool> login(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
+    return _performAuthOperation(() async {
       final data = await _authService.login(email, password);
-
-      _token = data['token'];
-      _user = UserModel.fromJson(data);
-
-      await _storageService.saveToken(_token!);
-      await _storageService.saveUserData(data);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
+      await _handleAuthSuccess(data);
+    });
   }
 
   Future<bool> register(String name, String businessName, String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
+    return _performAuthOperation(() async {
       final data = await _authService.register(name, businessName, email, password);
-
-      _token = data['token'];
-      _user = UserModel.fromJson(data);
-
-      await _storageService.saveToken(_token!);
-      await _storageService.saveUserData(data);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
+      await _handleAuthSuccess(data);
+    });
   }
 
   Future<void> logout() async {
@@ -79,82 +43,118 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> tryAutoLogin() async {
-    final savedToken = await _storageService.getToken();
-    final userData = await _storageService.getUserData();
-    if (savedToken != null && userData != null) {
-      _token = savedToken;
-      _user = UserModel.fromJson(userData);
-      notifyListeners();
+    try {
+      final savedToken = await _storageService.getToken();
+      final userData = await _storageService.getUserData();
+      
+      if (savedToken != null && userData != null) {
+        _token = savedToken;
+        _user = UserModel.fromJson(userData);
+        notifyListeners();
+      }
+    } catch (e) {
+      AppLogger.error('Erreur lors de la connexion automatique', e);
+      await logout();
     }
   }
 
   Future<void> fetchProfile() async {
-    _isLoadingProfile = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final token = await _storageService.getToken();
-      final data = await _authService.getProfile(token!);
+    await _performProfileOperation(() async {
+      final token = await _getValidToken();
+      final data = await _authService.getProfile(token);
       _user = UserModel.fromJson(data);
       await _storageService.saveUserData(data);
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      _isLoadingProfile = false;
-      notifyListeners();
-    }
+    });
   }
 
   Future<void> updateProfile(String name, String email) async {
-    _isLoadingProfile = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final token = await _storageService.getToken();
-      await _authService.updateProfile(token!, name, email);
+    await _performProfileOperation(() async {
+      final token = await _getValidToken();
+      await _authService.updateProfile(token, name, email);
       await fetchProfile();
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      _isLoadingProfile = false;
-      notifyListeners();
-    }
+    });
   }
 
   Future<void> changePassword(String oldPassword, String newPassword) async {
-    _isLoadingProfile = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final token = await _storageService.getToken();
-      if (token == null) {
-        throw Exception('Token d\'authentification manquant');
-      }
+    await _performProfileOperation(() async {
+      final token = await _getValidToken();
       await _authService.changePassword(token, oldPassword, newPassword);
-      // Recharger le profil après le changement de mot de passe
       await fetchProfile();
-    } catch (e) {
-      _errorMessage = e.toString();
-      AppLogger.error('Erreur lors du changement de mot de passe', e);
-      rethrow; // Propager l'erreur pour l'afficher dans l'UI
-    } finally {
-      _isLoadingProfile = false;
-      notifyListeners();
-    }
+    });
   }
 
   Future<bool> testAuth() async {
     try {
-      final token = await _storageService.getToken();
-      
-      if (token == null) {
-        return false;
-      }
+      final token = await _getValidToken();
       
       await _authService.getProfile(token);
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  Future<bool> _performAuthOperation(Future<void> Function() operation) async {
+    _setLoadingState(true);
+    _clearError();
+
+    try {
+      await operation();
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      return false;
+    } finally {
+      _setLoadingState(false);
+    }
+  }
+
+  Future<void> _performProfileOperation(Future<void> Function() operation) async {
+    _setProfileLoadingState(true);
+    _clearError();
+
+    try {
+      await operation();
+    } catch (e) {
+      _setError(e.toString());
+      AppLogger.error('Erreur lors de l\'opération sur le profil', e);
+      rethrow;
+    } finally {
+      _setProfileLoadingState(false);
+    }
+  }
+
+  Future<void> _handleAuthSuccess(Map<String, dynamic> data) async {
+    _token = data['token'];
+    _user = UserModel.fromJson(data);
+
+    await _storageService.saveToken(_token!);
+    await _storageService.saveUserData(data);
+  }
+
+  Future<String> _getValidToken() async {
+    final token = await _storageService.getToken();
+    if (token == null) {
+      throw Exception('Token d\'authentification manquant');
+    }
+    return token;
+  }
+
+  void _setLoadingState(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setProfileLoadingState(bool loading) {
+    _isLoadingProfile = loading;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _errorMessage = null;
+  }
+
+  void _setError(String error) {
+    _errorMessage = error;
   }
 }

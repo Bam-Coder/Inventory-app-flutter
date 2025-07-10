@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../controllers/product_provider.dart';
 import '../../stock/models/stock_log_model.dart';
+import '../models/product_model.dart';
 
 class ProductFormScreen extends StatefulWidget {
   const ProductFormScreen({super.key});
@@ -40,6 +41,29 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   int _reorderThreshold = 5;
   String _supplier = '';
 
+  ProductModel? editingProduct;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (editingProduct == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is ProductModel) {
+        editingProduct = args;
+        // Préremplir les contrôleurs
+        _nameController.text = editingProduct!.name;
+        _categoryController.text = editingProduct!.category;
+        _descriptionController.text = editingProduct!.description;
+        _supplierController.text = editingProduct!.supplier;
+        _quantityController.text = editingProduct!.quantity.toString();
+        _priceController.text = editingProduct!.price.toString();
+        _reorderThresholdController.text = editingProduct!.reorderThreshold.toString();
+        _unit = editingProduct!.unit;
+        setState(() {}); // Pour rafraîchir l'affichage si besoin
+      }
+    }
+  }
+
   String? _validateNumber(String? value, String label, {bool allowZero = false}) {
     if (value == null || value.isEmpty) return 'Champ requis';
     final numValue = num.tryParse(value);
@@ -67,28 +91,58 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     });
     try {
       final provider = Provider.of<ProductProvider>(context, listen: false);
-      await provider.addProduct(
-        _name,
-        _category,
-        _quantity,
-        _price,
-        description: _description,
-        reorderThreshold: _reorderThreshold,
-        unit: _unit,
-        supplier: _supplier,
-        imagePath: _imageFile?.path,
-      );
-      if (!mounted) return;
-      if (provider.error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Produit ajouté avec succès')),
+      
+      if (editingProduct != null) {
+        // Mode édition - mettre à jour le produit existant
+        await provider.updateProduct(
+          editingProduct!.id,
+          _name,
+          _category,
+          _quantity,
+          _price,
+          description: _description,
+          reorderThreshold: _reorderThreshold,
+          unit: _unit,
+          supplier: _supplier,
+          imagePath: _imageFile?.path,
         );
-        await provider.loadProducts(forceRefresh: true);
-        Navigator.pop(context); // Retour à la liste
+        if (!mounted) return;
+        if (provider.error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Produit mis à jour avec succès')),
+          );
+          await provider.loadProducts(forceRefresh: true);
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(extractErrorMessage(provider.error))),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(extractErrorMessage(provider.error))),
+        // Mode ajout - créer un nouveau produit
+        await provider.addProduct(
+          _name,
+          _category,
+          _quantity,
+          _price,
+          description: _description,
+          reorderThreshold: _reorderThreshold,
+          unit: _unit,
+          supplier: _supplier,
+          imagePath: _imageFile?.path,
         );
+        if (!mounted) return;
+        if (provider.error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Produit ajouté avec succès')),
+          );
+          await provider.loadProducts(forceRefresh: true);
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(extractErrorMessage(provider.error))),
+          );
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -119,7 +173,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajouter un produit')),
+      appBar: AppBar(
+        title: Text(editingProduct != null ? 'Modifier le produit' : 'Ajouter un produit'),
+      ),
       body: Center(
         child: Card(
           margin: const EdgeInsets.all(16),
@@ -281,7 +337,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               onPressed: _isLoading ? null : _submitForm,
-              child: const Text('Ajouter'),
+              child: Text(editingProduct != null ? 'Mettre à jour' : 'Ajouter'),
             ),
           );
   }

@@ -135,8 +135,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 Expanded(
                   child: _buildStatCard(
                     title: 'Valeur Totale',
-                    value: NumberFormat.currency(locale: 'fr_FR', symbol: '€').format(stats['totalValue'] ?? 0),
-                    icon: Icons.euro,
+                    value: NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA').format(stats['totalValue'] ?? 0),
+                    icon: Icons.currency_franc,
                     color: Colors.green,
                   ),
                 ),

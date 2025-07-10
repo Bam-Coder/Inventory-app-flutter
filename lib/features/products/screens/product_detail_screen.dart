@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../shared/navigation/app_routes.dart';
 import '../models/product_model.dart';
 import '../controllers/product_provider.dart';
 import '../../stock/controllers/stock_provider.dart';
@@ -43,6 +44,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<ProductProvider>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.product.name),
@@ -55,14 +58,46 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
         ),
         actions: [
           IconButton(
-            onPressed: () => _showAdjustStockDialog(context),
-            icon: const Icon(Icons.tune),
-            tooltip: 'Ajuster le stock',
-          ),
-          IconButton(
-            onPressed: () => _showEditDialog(context),
             icon: const Icon(Icons.edit),
             tooltip: 'Modifier',
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.productForm, arguments: widget.product);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete),
+            tooltip: 'Supprimer',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Supprimer ce produit ?'),
+                  content: const Text('Cette action est irréversible.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Annuler'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Supprimer'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await provider.deleteProduct(widget.product.id);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Produit supprimé avec succès'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
           ),
         ],
       ),
@@ -144,8 +179,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                   _buildInfoRow('Quantité en stock', '${widget.product.quantity} unités', 
                     widget.product.quantity <= 10 ? Colors.red : Colors.green),
                   _buildInfoRow('Prix unitaire', '${widget.product.price.toStringAsFixed(0)} FCFA', Colors.blue),
-                  if (widget.product.supplier != null && widget.product.supplier!.isNotEmpty)
-                    _buildInfoRow('Fournisseur', widget.product.supplier!, Colors.purple),
+                  if (widget.product.supplier.isNotEmpty)
+                    _buildInfoRow('Fournisseur', widget.product.supplier, Colors.purple),
                   _buildInfoRow('ID du produit', widget.product.id, Colors.grey),
                 ],
               ),
@@ -372,15 +407,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
         );
       }
     }
-  }
-
-  void _showEditDialog(BuildContext context) {
-    // Navigation vers l'écran de modification
-    Navigator.pushNamed(
-      context,
-      '/product/edit',
-      arguments: widget.product,
-    );
   }
 
   Color _getCategoryColor(String category) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../controllers/stock_provider.dart';
 import '../models/stock_log_model.dart';
@@ -129,7 +128,7 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: log.typeColor.withValues(alpha: 0.1),
+          backgroundColor: log.typeColor.withOpacity(0.1),
           child: Icon(
             log.typeColor == Colors.green
                 ? Icons.add
@@ -139,9 +138,30 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
             color: log.typeColor,
           ),
         ),
-        title: Text(
-          log.productName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                log.productName != 'Produit inconnu'
+                  ? log.productName
+                  : log.productId,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text(
+              '${log.createdAt.day.toString().padLeft(2, '0')}/'
+              '${log.createdAt.month.toString().padLeft(2, '0')}/'
+              '${log.createdAt.year} '
+              '${log.createdAt.hour.toString().padLeft(2, '0')}:'
+              '${log.createdAt.minute.toString().padLeft(2, '0')}',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,7 +172,7 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: log.typeColor.withValues(alpha: 0.1),
+                    color: log.typeColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -185,15 +205,6 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 4),
-            Text(
-              'Par ${log.createdBy} • '
-              '${DateFormat('dd/MM/yyyy à HH:mm').format(log.createdAt)}',
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 11,
-              ),
-            ),
           ],
         ),
         isThreeLine: true,

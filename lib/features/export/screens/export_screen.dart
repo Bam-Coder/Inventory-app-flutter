@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/export_service.dart';
 import '../../../shared/widgets/loading_overlay.dart';
+import 'dart:io';
+import 'package:share_plus/share_plus.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -69,6 +72,16 @@ class _ExportScreenState extends State<ExportScreen> {
                 color: Colors.grey[600],
               ),
             ),
+            const SizedBox(height: 16),
+            /*ElevatedButton.icon(
+              onPressed: _testExportEndpoints,
+              icon: const Icon(Icons.wifi_tethering),
+              //label: const Text('Tester la connexion'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),*/
           ],
         ),
       ),
@@ -255,21 +268,27 @@ class _ExportScreenState extends State<ExportScreen> {
     });
 
     try {
-      final downloadUrl = await exportFunction();
-      await _launchUrl(downloadUrl);
+      print('🔄 Début de l\'export: $type');
+      final filePath = await exportFunction();
+      print('📁 Chemin du fichier: $filePath');
+      
+      await _handleFileResult(filePath, type);
+      
+    } catch (e) {
+      print('❌ Erreur lors de l\'export $type: $e');
+      setState(() {
+        _error = 'Erreur lors de l\'export des $type: ${e.toString()}';
+      });
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export des $type lancé avec succès'),
-            backgroundColor: Colors.green,
+            content: Text('Erreur: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
-    } catch (e) {
-      setState(() {
-        _error = 'Erreur lors de l\'export: ${e.toString()}';
-      });
     } finally {
       setState(() {
         _isExporting = false;
@@ -277,12 +296,128 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _handleFileResult(String filePath, String type) async {
+    try {
+      await _launchUrl(filePath);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export des $type lancé avec succès'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Erreur lors du traitement du fichier: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _launchUrl(String filePath) async {
+    print('Lien de téléchargement reçu : $filePath');
+    if (filePath.startsWith('http')) {
+      final uri = Uri.parse(filePath);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorDialog('Impossible d\'ouvrir le lien de téléchargement.\n\n$filePath');
+      }
+    } else if (filePath.startsWith('data:text/csv')) {
+      // Extraire le CSV du data URI
+      final csvContent = Uri.decodeComponent(filePath.split(',').last);
+      // Proposer de partager ou copier le CSV
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Export CSV'),
+            content: const Text('Le CSV a été généré. Vous pouvez le partager ou le copier.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Share.share(csvContent, subject: 'Export CSV');
+                  Navigator.pop(context);
+                },
+                child: const Text('Partager'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: csvContent));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('CSV copié dans le presse-papier')),
+                  );
+                },
+                child: const Text('Copier'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+            ],
+          ),
+        );
+      }
     } else {
-      throw Exception('Impossible d\'ouvrir l\'URL: $url');
+      // Fichier local
+      final file = File(filePath);
+      if (await file.exists()) {
+        final uri = Uri.file(filePath);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        } else {
+          _showErrorDialog('Impossible d\'ouvrir le fichier local.\n\n$filePath');
+        }
+      } else {
+        _showErrorDialog('Fichier non trouvé : $filePath');
+      }
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Erreur'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _testExportEndpoints() async {
+    try {
+      final isWorking = await _exportService.testExportEndpoints();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isWorking 
+                  ? 'Connexion aux exports OK' 
+                  : 'Erreur de connexion aux exports'
+            ),
+            backgroundColor: isWorking ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur de test: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 } 

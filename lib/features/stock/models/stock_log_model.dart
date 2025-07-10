@@ -42,7 +42,14 @@ class StockLogModel {
       
       // Gestion sécurisée du productName
       String productName = 'Produit inconnu';
-      String productId = json['productId'] ?? '';
+      String productId = '';
+      if (json['productId'] != null && json['productId'] is String) {
+        productId = json['productId'];
+      } else if (json['product'] != null && json['product'] is Map && json['product']['_id'] != null) {
+        productId = json['product']['_id'];
+      } else if (json['_id'] != null) {
+        productId = json['_id'];
+      }
       
       if (json['productName'] != null && json['productName'].toString().isNotEmpty) {
         productName = json['productName'];

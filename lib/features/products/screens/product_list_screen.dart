@@ -116,6 +116,12 @@ class _ProductListScreenState extends State<ProductListScreen> {
       appBar: AppBar(
         title: const Text('Produits'),
         actions: [
+          // Bouton de nettoyage forcé
+          /*IconButton(
+            onPressed: () => provider.forceRefreshProducts(),
+            icon: const Icon(Icons.cleaning_services),
+            tooltip: 'Nettoyer le cache',
+          ),*/
           // Bouton d'export
           PopupMenuButton<String>(
             onSelected: (value) => _handleExportAction(value, provider),
@@ -145,7 +151,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
             tooltip: 'Export',
           ),
           IconButton(
-            onPressed: () => provider.loadProducts(),
+            onPressed: () => provider.loadProducts(forceRefresh: true),
             icon: const Icon(Icons.refresh),
             tooltip: 'Actualiser',
           ),
@@ -183,116 +189,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
             ),
           ),
           Expanded(
-            child: _showLowStock
-                ? (provider.isLoadingLowStock
-                    ? const Center(child: CircularProgressIndicator())
-                    : provider.lowStockProducts.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.warning, size: 64, color: Colors.orange[400]),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Aucun produit en stock faible',
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                        color: Colors.grey[600],
-                                      ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: provider.lowStockProducts.length,
-                            itemBuilder: (context, index) {
-                              final ProductModel product = provider.lowStockProducts[index];
-                              return _buildProductCard(context, product, provider);
-                            },
-                          ))
-                : RefreshIndicator(
-                    onRefresh: () => provider.loadProducts(),
-                    child: provider.isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : provider.error != null
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Erreur: ${provider.error}',
-                                      style: Theme.of(context).textTheme.bodyLarge,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ElevatedButton(
-                                      onPressed: () => provider.loadProducts(),
-                                      child: const Text('Réessayer'),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : provider.products.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'Aucun produit',
-                                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                                color: Colors.grey[600],
-                                              ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Ajoutez votre premier produit',
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                color: Colors.grey[500],
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : _searchController.text.isNotEmpty
-                                    ? (provider.isSearching
-                                        ? const Center(child: CircularProgressIndicator())
-                                        : provider.searchResults.isEmpty
-                                            ? Center(
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-                                                    const SizedBox(height: 16),
-                                                    Text(
-                                                      'Aucun résultat',
-                                                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                                            color: Colors.grey[600],
-                                                          ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              )
-                                            : ListView.builder(
-                                                padding: const EdgeInsets.all(16),
-                                                itemCount: provider.searchResults.length,
-                                                itemBuilder: (context, index) {
-                                                  final ProductModel product = provider.searchResults[index];
-                                                  return _buildProductCard(context, product, provider);
-                                                },
-                                              ))
-                                    : ListView.builder(
-                                        padding: const EdgeInsets.all(16),
-                                        itemCount: provider.products.length,
-                                        itemBuilder: (context, index) {
-                                          final ProductModel product = provider.products[index];
-                                          return _buildProductCard(context, product, provider);
-                                        },
-                                      ),
-                  ),
+            child: _buildProductList(provider),
           ),
         ],
       ),
@@ -302,6 +199,155 @@ class _ProductListScreenState extends State<ProductListScreen> {
         },
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  Widget _buildProductList(ProductProvider provider) {
+    // Affichage des produits en stock faible
+    if (_showLowStock) {
+      if (provider.isLoadingLowStock) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      
+      if (provider.lowStockProducts.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning, size: 64, color: Colors.orange[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun produit en stock faible',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+              ),
+            ],
+          ),
+        );
+      }
+      
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: provider.lowStockProducts.length,
+        itemBuilder: (context, index) {
+          final ProductModel product = provider.lowStockProducts[index];
+          return _buildProductCard(context, product, provider);
+        },
+      );
+    }
+
+    // Affichage normal avec RefreshIndicator
+    return RefreshIndicator(
+      onRefresh: () => provider.loadProducts(forceRefresh: true),
+      child: _buildMainProductList(provider),
+    );
+  }
+
+  Widget _buildMainProductList(ProductProvider provider) {
+    // État de chargement
+    if (provider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // État d'erreur
+    if (provider.error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            const SizedBox(height: 16),
+            Text(
+              'Erreur: ${provider.error}',
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => provider.loadProducts(forceRefresh: true),
+              child: const Text('Réessayer'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Recherche active
+    if (_searchController.text.isNotEmpty) {
+      if (provider.isSearching) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      
+      if (provider.searchResults.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun résultat pour "${_searchController.text}"',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+              ),
+            ],
+          ),
+        );
+      }
+      
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: provider.searchResults.length,
+        itemBuilder: (context, index) {
+          final ProductModel product = provider.searchResults[index];
+          return _buildProductCard(context, product, provider);
+        },
+      );
+    }
+
+    // Liste normale des produits
+    if (provider.products.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'Aucun produit',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ajoutez votre premier produit',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey[500],
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(context, AppRoutes.productForm);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Ajouter un produit'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: provider.products.length,
+      itemBuilder: (context, index) {
+        final ProductModel product = provider.products[index];
+        return _buildProductCard(context, product, provider);
+      },
     );
   }
 
@@ -380,7 +426,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 ),
               ],
             ),
-            if (product.supplier != null && product.supplier!.isNotEmpty) ...[
+            if (product.supplier.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
                 'Fournisseur: ${product.supplier}',

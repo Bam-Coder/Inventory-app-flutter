@@ -6,7 +6,6 @@ import '../../../features/products/controllers/product_provider.dart';
 import '../../../features/stock/controllers/stock_provider.dart';
 import '../../dashboard/widgets/stats_card.dart';
 import '../../../shared/navigation/app_routes.dart';
-import '../../products/screens/product_detail_screen.dart';
 import '../../products/screens/product_list_screen.dart';
 import '../../stock/screens/stock_history_screen.dart';
 import '../../../core/utils/logger.dart';
@@ -20,6 +19,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
+  bool _isInitialized = false;
   
   final List<Widget> _screens = [
     const DashboardContent(),
@@ -30,11 +30,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Charge les données au démarrage avec force refresh
-      Provider.of<ProductProvider>(context, listen: false).refreshAll();
-      Provider.of<StockProvider>(context, listen: false).loadStockHistory(forceRefresh: true);
-    });
+    _initializeData();
+  }
+
+  Future<void> _initializeData() async {
+    if (_isInitialized) return;
+    
+    try {
+      // Charger les données une seule fois au démarrage
+      final productProvider = Provider.of<ProductProvider>(context, listen: false);
+      final stockProvider = Provider.of<StockProvider>(context, listen: false);
+      
+      // Charger les produits d'abord
+      await productProvider.loadProducts();
+      
+      // Puis charger les statistiques et stocks faibles
+      await Future.wait([
+        productProvider.fetchProductStats(),
+        productProvider.fetchLowStockProducts(),
+        stockProvider.loadStockHistory(),
+      ]);
+      
+      _isInitialized = true;
+    } catch (e) {
+      AppLogger.error('Erreur lors de l\'initialisation du dashboard', e);
+    }
   }
 
   @override
@@ -108,6 +128,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       drawer: _buildDrawer(context, user),
       body: _screens[_currentIndex],
+      floatingActionButton: _currentIndex == 1
+          ? _buildFloatingActionButton()
+          : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -131,7 +154,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
@@ -283,7 +305,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 2: // Stock
         return FloatingActionButton(
           onPressed: () {
-            // Naviguer vers l'écran de stock qui a son propre FAB
             setState(() {
               _currentIndex = 2;
             });
@@ -297,7 +318,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _runIntegrationTests(BuildContext context) async {
     try {
-      // Import dynamique pour éviter les erreurs de compilation
       await _testAuthentication(context);
       await _testProducts(context);
       await _testStock(context);
@@ -322,54 +342,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _testAuthentication(BuildContext context) async {
-          AppLogger.info('🧪 Test d\'authentification...');
+    AppLogger.info('🧪 Test d\'authentification...');
     final auth = Provider.of<AuthProvider>(context, listen: false);
     
-    // Test de récupération du profil
     try {
       await auth.fetchProfile();
-              AppLogger.success('✅ Profil récupéré: SUCCÈS');
+      AppLogger.success('✅ Profil récupéré: SUCCÈS');
     } catch (e) {
-              AppLogger.error('❌ Erreur profil', e);
+      AppLogger.error('❌ Erreur profil', e);
     }
   }
 
   Future<void> _testProducts(BuildContext context) async {
-          AppLogger.info('🧪 Test des produits...');
+    AppLogger.info('🧪 Test des produits...');
     final productProvider = Provider.of<ProductProvider>(context, listen: false);
     
     try {
       await productProvider.loadProducts();
-              AppLogger.success('✅ Produits chargés: SUCCÈS (${productProvider.products.length} produits)');
+      AppLogger.success('✅ Produits chargés: SUCCÈS (${productProvider.products.length} produits)');
     } catch (e) {
-              AppLogger.error('❌ Erreur produits', e);
+      AppLogger.error('❌ Erreur produits', e);
     }
   }
 
   Future<void> _testStock(BuildContext context) async {
-          AppLogger.info('🧪 Test du stock...');
+    AppLogger.info('🧪 Test du stock...');
     final stockProvider = Provider.of<StockProvider>(context, listen: false);
     
     try {
       await stockProvider.loadStockHistory();
-              AppLogger.success('✅ Stock chargé: SUCCÈS (${stockProvider.stockLogs.length} mouvements)');
+      AppLogger.success('✅ Stock chargé: SUCCÈS (${stockProvider.stockLogs.length} mouvements)');
     } catch (e) {
-              AppLogger.error('❌ Erreur stock', e);
+      AppLogger.error('❌ Erreur stock', e);
     }
   }
 
   Future<void> _testProfileUpdate(BuildContext context) async {
-          AppLogger.info('🧪 Test de mise à jour du profil...');
+    AppLogger.info('🧪 Test de mise à jour du profil...');
     final auth = Provider.of<AuthProvider>(context, listen: false);
     
     try {
       await auth.fetchProfile();
-              AppLogger.success('✅ Mise à jour profil: SUCCÈS');
+      AppLogger.success('✅ Mise à jour profil: SUCCÈS');
     } catch (e) {
-              AppLogger.error('❌ Erreur mise à jour', e);
+      AppLogger.error('❌ Erreur mise à jour', e);
     }
   }
-
 }
 
 class DashboardContent extends StatefulWidget {
@@ -380,6 +398,8 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
+  bool _isRefreshing = false;
+
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
@@ -387,9 +407,25 @@ class _DashboardContentState extends State<DashboardContent> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        // Forcer le rechargement complet
-        await Provider.of<ProductProvider>(context, listen: false).refreshAll();
-        await Provider.of<StockProvider>(context, listen: false).loadStockHistory(forceRefresh: true);
+        if (_isRefreshing) return;
+        _isRefreshing = true;
+        
+        try {
+          // Rechargement optimisé avec délai entre les requêtes
+          final productProvider = Provider.of<ProductProvider>(context, listen: false);
+          final stockProvider = Provider.of<StockProvider>(context, listen: false);
+          
+          await productProvider.loadProducts(forceRefresh: true);
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          await Future.wait([
+            productProvider.fetchProductStats(forceRefresh: true),
+            productProvider.fetchLowStockProducts(),
+            stockProvider.loadStockHistory(forceRefresh: true),
+          ]);
+        } finally {
+          _isRefreshing = false;
+        }
       },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -477,13 +513,14 @@ class _DashboardContentState extends State<DashboardContent> {
           builder: (context, productProvider, child) {
             final stats = productProvider.productStats;
             final isLoading = productProvider.isLoadingStats;
+            
             if (productProvider.error != null) {
-              // Affiche l'erreur de façon propre
               return ErrorDisplay(
                 message: productProvider.error!,
                 onRetry: () => productProvider.fetchProductStats(forceRefresh: true),
               );
             }
+            
             return isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : stats.isEmpty
@@ -638,29 +675,43 @@ class _DashboardContentState extends State<DashboardContent> {
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: log.typeColor.withValues(alpha: 0.1),
+                      backgroundColor: log.typeColor.withOpacity(0.1),
                       child: Icon(
                         log.type.toLowerCase() == 'in' ? Icons.add : Icons.remove,
                         color: log.typeColor,
                         size: 20,
                       ),
                     ),
-                    title: Text(
-                      log.productName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            log.productName != 'Produit inconnu'
+                              ? log.productName
+                              : log.productId,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${log.createdAt.day.toString().padLeft(2, '0')}/'
+                          '${log.createdAt.month.toString().padLeft(2, '0')}/'
+                          '${log.createdAt.year} '
+                          '${log.createdAt.hour.toString().padLeft(2, '0')}:'
+                          '${log.createdAt.minute.toString().padLeft(2, '0')}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                     subtitle: Text(
                       '${log.typeLabel} • ${log.quantity} unités',
                       style: TextStyle(
                         color: log.typeColor,
                         fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    trailing: Text(
-                      '${log.createdAt.day}/${log.createdAt.month}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -677,13 +728,59 @@ class _DashboardContentState extends State<DashboardContent> {
     return Consumer<ProductProvider>(
       builder: (context, productProvider, child) {
         if (productProvider.isLoadingLowStock) {
-          return const Center(child: CircularProgressIndicator());
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Alertes Stock Faible',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange[700],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Center(child: CircularProgressIndicator()),
+            ],
+          );
         }
 
         final lowStockProducts = productProvider.lowStockProducts;
         
         if (lowStockProducts.isEmpty) {
-          return const SizedBox.shrink();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Alertes Stock Faible',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green[700],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                color: Colors.green.withValues(alpha: 0.1),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green[700]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Aucun produit en stock faible',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
         }
 
         return Column(
@@ -692,12 +789,34 @@ class _DashboardContentState extends State<DashboardContent> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Alertes Stock Faible',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange[700],
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.orange[700], size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Alertes Stock Faible',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[700],
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[700],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${lowStockProducts.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 TextButton(
                   onPressed: () {
@@ -708,48 +827,44 @@ class _DashboardContentState extends State<DashboardContent> {
               ],
             ),
             const SizedBox(height: 16),
-            Card(
-              color: Colors.orange.withValues(alpha: 0.1),
-              child: Column(
-                children: lowStockProducts.take(3).map((product) {
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.orange.withValues(alpha: 0.2),
-                      child: Icon(
-                        Icons.warning,
-                        color: Colors.orange[700],
-                      ),
+            ...lowStockProducts.take(3).map((product) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: Colors.orange.withValues(alpha: 0.05),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                    child: Icon(
+                      Icons.warning,
+                      color: Colors.orange[700],
+                      size: 20,
                     ),
-                    title: Text(
-                      product.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  title: Text(
+                    product.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'Stock: ${product.quantity} ${product.unit} (Seuil: ${product.reorderThreshold})',
+                    style: TextStyle(
+                      color: Colors.orange[700],
+                      fontWeight: FontWeight.bold,
                     ),
-                    subtitle: Text(
-                      '${product.quantity} unités restantes',
-                      style: TextStyle(
-                        color: Colors.orange[700],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    trailing: Text(
-                      product.category,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ProductDetailScreen(product: product),
-                        ),
-                      );
+                  ),
+                  trailing: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRoutes.productForm, arguments: product);
                     },
-                  );
-                }).toList(),
-              ),
-            ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    child: const Text('Réapprovisionner'),
+                  ),
+                ),
+              );
+            }),
           ],
         );
       },
@@ -759,30 +874,41 @@ class _DashboardContentState extends State<DashboardContent> {
 
 class ErrorDisplay extends StatelessWidget {
   final String message;
-  final VoidCallback? onRetry;
-  const ErrorDisplay({required this.message, this.onRetry, super.key});
+  final VoidCallback onRetry;
+
+  const ErrorDisplay({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Card(
+      color: Colors.red.withValues(alpha: 0.1),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, color: Colors.red[300], size: 64),
-            const SizedBox(height: 16),
+            Icon(Icons.error_outline, color: Colors.red[700], size: 48),
+            const SizedBox(height: 8),
             Text(
-              message,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.red[700]),
+              'Erreur: $message',
+              style: TextStyle(
+                color: Colors.red[700],
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            if (onRetry != null)
-              ElevatedButton(
-                onPressed: onRetry,
-                child: const Text('Réessayer'),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
               ),
+              child: const Text('Réessayer'),
+            ),
           ],
         ),
       ),
